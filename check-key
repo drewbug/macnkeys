@@ -1,0 +1,17 @@
+#!/opt/local/bin/perl -w
+use strict;
+use Crypt::OpenSSL::RSA;
+use Crypt::OpenSSL::Bignum;
+
+my $scap = do { undef $/ ; <> };
+my $fvh = substr($scap, 0x50, 0x810000);
+my $pub = reverse substr($scap, 0x810060, 0x100); # Switch from little- to big-endian
+my $sig = reverse substr($scap, 0x810160, 0x100); # (Thanks, Viktor!)
+
+my $n = Crypt::OpenSSL::Bignum->new_from_bin($pub);
+my $e = Crypt::OpenSSL::Bignum->new_from_decimal("65537");
+my $rsa = Crypt::OpenSSL::RSA->new_key_from_parameters($n,$e);
+$rsa->use_sha256_hash();
+
+print "Signature ok!\n" if $rsa->verify($fvh, $sig);
+print $rsa->get_public_key_string();

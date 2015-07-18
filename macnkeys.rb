@@ -2,6 +2,7 @@
 
 require 'test/unit/assertions'
 require 'stringio'
+require 'pp'
 
 include Test::Unit::Assertions
 
@@ -31,32 +32,62 @@ EFI_CONFIG_FILE_NAME_GUID = [ 0x98B8D59B, 0xE8BA, 0x48EE, 0x98, 0xDD, 0xC2, 0x95
 EFI_FV_FILETYPE_RAW = [ 0x01 ].pack(EFI_FV_FILETYPE)
 FFS_ATTRIB_CHECKSUM = [ 0x40 ].pack(EFI_FFS_FILE_ATTRIBUTES)
 
-Struct.new('File', :name, :checksum, :type, :attributes, :size, :state, :data)
+Struct.new('File', :name, :checksum, :type, :attributes, :size, :state)
+
+#####
 
 ARGF.binmode
 scap = StringIO.new(ARGF.file.read)
 scap.pos = scap.string.index(EFI_CONFIG_FILE_NAME_GUID)
 
-config = Struct::File.new
+#####
 
-config.name = scap.read(16)
-assert_equal EFI_CONFIG_FILE_NAME_GUID, config.name
+header = Struct::File.new
 
-config.checksum = scap.read(2)
+header.name = scap.read(16)
+assert_equal EFI_CONFIG_FILE_NAME_GUID, header.name
 
-config.type = scap.read(1)
-assert_equal EFI_FV_FILETYPE_RAW, config.type
+header.checksum = scap.read(2)
 
-config.attributes = scap.read(1)
-assert_equal FFS_ATTRIB_CHECKSUM, config.attributes
+header.type = scap.read(1)
+assert_equal EFI_FV_FILETYPE_RAW, header.type
 
-config.size = scap.read(3)
+header.attributes = scap.read(1)
+assert_equal FFS_ATTRIB_CHECKSUM, header.attributes
 
-config.state = scap.read(1)
+header.size = scap.read(3)
 
-count = config.size.unpack('C3')
+header.state = scap.read(1)
+
+#####
+
+count = header.size.unpack('C3')
 count = count.pop << 16 | count.pop << 8 | count.pop
-config.data = scap.read(count - 24)
-assert_equal "\0\0", config.data.slice(-2, 2)
+raw = scap.read(count - 24)
+assert_equal "\0\0", raw.slice(-2, 2)
 
-puts config.data.strip
+#####
+
+config = Hash.new
+
+raw.strip.lines.inject(nil) do |key, line|
+  line.strip!
+
+  next key if line.nil?
+
+  if line.start_with?('[') && line.end_with?(']')
+    key = line.slice(1...-1)
+    config[key] ||= Hash.new
+  elsif line.include? '='
+    value = line.split('=')
+    value.map!(&:strip!)
+
+    unless key.nil?
+      config[key].store(value[0], value[1])
+    end
+  end
+
+  next key
+end
+
+pp config
